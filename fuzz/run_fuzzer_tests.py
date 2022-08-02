@@ -64,7 +64,7 @@ def cmd(command):
             timer.cancel()
 
         if is_killed['value']:
-            text = 'error: timeout, ' + text
+            text = f'error: timeout, {text}'
             returncode = 1
 
         return text, returncode
@@ -85,10 +85,7 @@ def run_test(fuzzer, corpus_path):
 
     failures = 0
 
-    valgrind = None
-    if os.environ.get('VG', ''):
-        valgrind = which('valgrind')
-
+    valgrind = which('valgrind') if os.environ.get('VG', '') else None
     for fname in os.listdir(corpus_path):
         seedpath = os.path.join(corpus_path, fname)
 
@@ -98,7 +95,7 @@ def run_test(fuzzer, corpus_path):
 
         failed = False
         if returncode != 0 or 'error' in text:
-            print('failure on %s' % fname)
+            print(f'failure on {fname}')
             failed = True
 
         if valgrind:
@@ -106,7 +103,7 @@ def run_test(fuzzer, corpus_path):
                 [valgrind, '--error-exitcode=1', fuzz_target, seedpath])
             if returncode:
                 print(text)
-                print('failure on %s' % fname)
+                print(f'failure on {fname}')
                 failed = True
 
         if failed:

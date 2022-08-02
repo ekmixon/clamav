@@ -97,12 +97,15 @@ class TestCase(unittest.TestCase):
 
         # Get test paths from environment variables.
         cls.version = os.getenv("VERSION")
-        if cls.version == None:
+        if cls.version is None:
             raise Exception("VERSION environment variable not defined! Aborting...")
 
         cls.path_source =      Path(os.getenv("SOURCE"))
         cls.path_build =       Path(os.getenv("BUILD"))
-        cls.path_tmp =         Path(tempfile.mkdtemp(prefix=(cls.__name__ + "-"), dir=os.getenv("TMP")))
+        cls.path_tmp = Path(
+            tempfile.mkdtemp(prefix=f"{cls.__name__}-", dir=os.getenv("TMP"))
+        )
+
         cls.check_clamav =     Path(os.getenv("CHECK_CLAMAV"))     if os.getenv("CHECK_CLAMAV") != None else None
         cls.check_clamd =      Path(os.getenv("CHECK_CLAMD"))      if os.getenv("CHECK_CLAMD") != None else None
         cls.check_fpu_endian = Path(os.getenv("CHECK_FPU_ENDIAN")) if os.getenv("CHECK_FPU_ENDIAN") != None else None
@@ -127,10 +130,14 @@ class TestCase(unittest.TestCase):
         if os.getenv('VALGRIND') != None:
             cls.log_suffix = '.valgrind.log'
             cls.valgrind = Path(os.getenv("VALGRIND"))
-            cls.valgrind_args = '-v --trace-children=yes --track-fds=yes --leak-check=full '                  + \
-                                '--suppressions={} '.format(cls.path_source / "unit_tests" / "valgrind.supp") + \
-                                '--log-file={} '.format(cls.path_tmp / "valgrind.log")                        + \
-                                '--error-exitcode=123'
+            cls.valgrind_args = (
+                (
+                    '-v --trace-children=yes --track-fds=yes --leak-check=full '
+                    + f'--suppressions={cls.path_source / "unit_tests" / "valgrind.supp"} '
+                )
+                + f'--log-file={cls.path_tmp / "valgrind.log"} '
+            ) + '--error-exitcode=123'
+
 
         # cls.log.info(f"{cls.__name__} Environment:")
         # cls.log.info(f"  version:           {cls.version}")
@@ -168,17 +175,22 @@ class TestCase(unittest.TestCase):
         # Restore current working directory before deleting cls.path_tmp.
         os.chdir(cls.original_working_directory)
 
-        if None == os.getenv("KEEPTEMP"):
+        if os.getenv("KEEPTEMP") is None:
             try:
                 shutil.rmtree(cls.path_tmp)
-                cls.log.info("Removed tmp directory: {}".format(cls.path_tmp))
+                cls.log.info(f"Removed tmp directory: {cls.path_tmp}")
             except Exception:
                 cls.log.info("No tmp directory to clean up.")
 
     def setUp(self):
         print("")
 
-        log_path = Path(self.path_build / 'unit_tests' / '{}{}'.format(self._testMethodName, self.log_suffix))
+        log_path = Path(
+            self.path_build
+            / 'unit_tests'
+            / f'{self._testMethodName}{self.log_suffix}'
+        )
+
         try:
             log_path.unlink()
         except Exception:
@@ -276,14 +288,14 @@ class TestCase(unittest.TestCase):
         if self.valgrind == "":
             return
 
-        if log_file == None:
+        if log_file is None:
             log_file = self.path_tmp / 'valgrind.log'
 
         if not log_file.exists():
-            raise AssertionError('{} not found. Valgrind failed to run?'.format(log_file))
+            raise AssertionError(f'{log_file} not found. Valgrind failed to run?')
 
         errors = False
-        self.log.info('Verifying {}...'.format(log_file))
+        self.log.info(f'Verifying {log_file}...')
         try:
             self.verify_log(
                 str(log_file),
@@ -338,7 +350,7 @@ class TestCase(unittest.TestCase):
         try:
             ec, stdout, stderr = result
         except:
-            raise AssertionError("Wrong result format: %s" % (result,))
+            raise AssertionError(f"Wrong result format: {result}")
 
         assert ec == exit_code, (
             "Code mismatch.\nExpected: %s\nActual: %s\nError: %s"
@@ -371,8 +383,8 @@ class TestCase(unittest.TestCase):
             - `AssertionError`: is raised if `filepath` is not a string
                                 or is empty.
         """
-        assert isinstance(filepath, str), "Invalid filepath: %s." % (filepath,)
-        assert os.path.exists(filepath), "file does not exist: %s." % (filepath,)
+        assert isinstance(filepath, str), f"Invalid filepath: {filepath}."
+        assert os.path.exists(filepath), f"file does not exist: {filepath}."
 
         hash_md5 = hashlib.md5()
         with open(filepath, "rb") as f:
@@ -394,11 +406,7 @@ class TestCase(unittest.TestCase):
         """
         assert files, "`files` should not be empty."
         files = files if isinstance(files, (list, tuple)) else [files]
-        md5_dict = {}
-        for path in files:
-            if os.path.isfile(path):
-                md5_dict[path] = self._md5(path)
-        return md5_dict
+        return {path: self._md5(path) for path in files if os.path.isfile(path)}
 
     def _pkill(self, process, options=["-9 -f"], sudo=False):
         """Wrapper for CLI *nix `pkill` command.
@@ -430,7 +438,7 @@ class TestCase(unittest.TestCase):
             "pkill", data='"%s"' % (process,), options=options, sudo=sudo
         )
         if res.ec != 0:
-            self.log.warning("Failed to pkill `%s` process." % (process,))
+            self.log.warning(f"Failed to pkill `{process}` process.")
         code, error, result = (
             res.ec if not code or code == 0 else code,
             "\n".join([error, res.err]),
@@ -565,12 +573,11 @@ class Executor(object):
 
         if logger != None:
             self._logger = logger
+        elif loggers.get(self.__class__.__name__):
+            self._logger = loggers.get(self.__class__.__name__)
         else:
-            if loggers.get(self.__class__.__name__):
-                self._logger = loggers.get(self.__class__.__name__)
-            else:
-                self._logger = Logger(self.__class__.__name__)
-                loggers[self.__class__.__name__] = self._logger
+            self._logger = Logger(self.__class__.__name__)
+            loggers[self.__class__.__name__] = self._logger
 
         self._process = None
         self._process_pid = None
@@ -581,10 +588,10 @@ class Executor(object):
 
     def _log_cmd_results(self):
         """Log exit code, stdout and stderr of the executed command."""
-        self._logger.debug("Exit code: %s" % self.code)
-        self._logger.debug("stdout: %s" % self.result)
+        self._logger.debug(f"Exit code: {self.code}")
+        self._logger.debug(f"stdout: {self.result}")
         if self.code:
-            self._logger.debug("stderr: %s" % self.error)
+            self._logger.debug(f"stderr: {self.error}")
 
     def _start_cmd_thread(self, target, target_args, timeout=EXECUTION_TIMEOUT):
         """Start command thread and kill it if timeout exceeds.
@@ -611,7 +618,7 @@ class Executor(object):
     def __run(self, cmd, cwd=None, env_vars={}, interact=""):
         """Execute command in separate thread."""
         if platform.system() == "Windows":
-            self._logger.debug("Run command: %s" % (cmd,))
+            self._logger.debug(f"Run command: {cmd}")
             self._process = subprocess.Popen(
                 cmd,
                 cwd=cwd,
@@ -631,11 +638,11 @@ class Executor(object):
                 # We will likely need these for testing and can propagate them
                 # manually, like so:
                 if "LD_LIBRARY_PATH" in sys_env:
-                    cmd = "export LD_LIBRARY_PATH={} && {}".format(sys_env['LD_LIBRARY_PATH'], cmd)
+                    cmd = f"export LD_LIBRARY_PATH={sys_env['LD_LIBRARY_PATH']} && {cmd}"
                 if "DYLD_LIBRARY_PATH" in sys_env:
-                    cmd = "export DYLD_LIBRARY_PATH={} && {}".format(sys_env['DYLD_LIBRARY_PATH'], cmd)
+                    cmd = f"export DYLD_LIBRARY_PATH={sys_env['DYLD_LIBRARY_PATH']} && {cmd}"
 
-            self._logger.debug("Run command: %s" % (cmd,))
+            self._logger.debug(f"Run command: {cmd}")
             self._process = subprocess.Popen(
                 cmd,
                 cwd=cwd,
@@ -712,12 +719,12 @@ class Executor(object):
                     if option not in unq_opts:
                         unq_opts.append(option)
 
-                opts = "-%s " % ("".join(unq_opts),)
+                opts = f'-{"".join(unq_opts)} '
 
             # Build command.
-            execute_cmd = "%s %s%s" % (cmd, opts, data)
+            execute_cmd = f"{cmd} {opts}{data}"
             if sudo:
-                execute_cmd = "sudo %s" % (execute_cmd,)
+                execute_cmd = f"sudo {execute_cmd}"
 
             return self._start_cmd_thread(
                 self.__run, (execute_cmd, cwd, env_vars, interact), timeout
@@ -734,12 +741,11 @@ class LogChecker:
 
         if logger != None:
             self._logger = logger
+        elif loggers.get(self.__class__.__name__):
+            self._logger = loggers.get(self.__class__.__name__)
         else:
-            if loggers.get(self.__class__.__name__):
-                self._logger = loggers.get(self.__class__.__name__)
-            else:
-                self._logger = Logger(self.__class__.__name__)
-                loggers[self.__class__.__name__] = self._logger
+            self._logger = Logger(self.__class__.__name__)
+            loggers[self.__class__.__name__] = self._logger
 
     @staticmethod
     def _prepare_value(value):
@@ -848,7 +854,7 @@ class LogChecker:
         if filename != None and not isinstance(filename, str):
             filename = filename.decode("utf-8", "ignore")
         assert isinstance(filename, str), "`filename` must be a string."
-        assert os.path.isfile(filename), "No such file: %s." % (filename,)
+        assert os.path.isfile(filename), f"No such file: {filename}."
         expected = self._prepare_value(expected)
 
         def read_log():
@@ -867,9 +873,7 @@ class LogChecker:
         for line_idx, chunk in read_log():
             chunk_size = chunk.count("\n")
             for item in expected:
-                matches_iterator = re.finditer(
-                    r"%s" % (item,), chunk, flags=re.MULTILINE
-                )
+                matches_iterator = re.finditer(f"{item}", chunk, flags=re.MULTILINE)
                 for match in matches_iterator:
                     relative_line = chunk.count("\n", 0, match.start()) + 1
                     line = max(relative_line, line_idx - chunk_size + relative_line)
@@ -881,12 +885,9 @@ class LogChecker:
             last_found_position = 0
             for item in expected:
                 found_matches = results.get(item)
-                assert found_matches, "Expected item `%s` not found in " "file: %s." % (
-                    item,
-                    filename,
-                )
+                assert found_matches, f"Expected item `{item}` not found in file: {filename}."
                 if len(found_matches) > 1:
-                    self._logger.warning("More than one match for item `%s`." % (item,))
+                    self._logger.warning(f"More than one match for item `{item}`.")
                 # Item(s) found. Let's get line number of first appearance.
                 current_found_position = found_matches[0]
                 # Compare first appearances of current and previous items.
@@ -899,12 +900,9 @@ class LogChecker:
         else:
             for item in expected:
                 found_matches = results.get(item)
-                assert found_matches, "Expected item `%s` not found in " "file: %s." % (
-                    item,
-                    filename,
-                )
+                assert found_matches, f"Expected item `{item}` not found in file: {filename}."
                 if len(found_matches) > 1:
-                    self._logger.warning("More than one match for item `%s`." % (item,))
+                    self._logger.warning(f"More than one match for item `{item}`.")
 
     def verify_unexpected_log(self, filename, unexpected=[], ignored=[]):
         """Check absence of regex patterns in specified file.
@@ -924,23 +922,26 @@ class LogChecker:
         if filename != None and not isinstance(filename, str):
             filename = filename.decode("utf-8", "ignore")
         assert isinstance(filename, str), "`filename` must be a string."
-        assert os.path.isfile(filename), "No such file: %s." % (filename,)
+        assert os.path.isfile(filename), f"No such file: {filename}."
         unexpected = self._prepare_value(unexpected)
         ignored = self._prepare_value(ignored)
 
         with open(filename, "r") as file_reader:
             found_items = []
             for line in file_reader:
-                for item in unexpected:
-                    if re.search(r"%s" % (item,), line):
-                        found_items.append(line.strip())
+                found_items.extend(
+                    line.strip()
+                    for item in unexpected
+                    if re.search(f"{item}", line)
+                )
+
         if ignored:
             for item in ignored:
                 for line in found_items[:]:
-                    if re.search(r"%s" % (item,), line):
+                    if re.search(f"{item}", line):
                         found_items.remove(line)
 
-        assert len(found_items) == 0, "Unexpected items were found in %s:\n%s" % (
+        assert not found_items, "Unexpected items were found in %s:\n%s" % (
             filename,
             found_items,
         )

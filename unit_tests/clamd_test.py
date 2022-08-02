@@ -24,14 +24,11 @@ def check_port_available(port_num: int) -> bool:
     '''
     Check if port # is available
     '''
-    port_is_available = True # It's probably available...
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     location = ("localhost", port_num)
 
     result_of_check = sock.connect_ex(location)
-    if result_of_check == 0:
-        port_is_available = False # Oh nevermind! Someone was listening!
+    port_is_available = result_of_check != 0
     sock.close()
 
     return port_is_available
@@ -45,8 +42,6 @@ class TC(testcase.TestCase):
 
         TC.clamd_pid = TC.path_tmp / 'clamd-test.pid'
         TC.clamd_socket =   'clamd-test.socket'             # <-- A relative path here and in check_clamd to avoid-
-                                                            # test failures caused by (invalid) long socket filepaths.
-                                                            # The max length for a socket file path is _really_ short.
         TC.clamd_port_num = 3319                            # <-- This is hard-coded into the `check_clamd` program
         TC.path_db = TC.path_tmp / 'database'
         TC.path_db.mkdir(parents=True)
@@ -59,16 +54,6 @@ class TC(testcase.TestCase):
             str(TC.path_db),
         )
 
-        # Identify a TCP port we can use.
-        # Presently disabled because check_clamd's port # is hardcoded.
-        #found_open_port = False
-        #for port_num in range(3310, 3410):
-        #    if check_port_available(port_num) == True:
-        #        found_open_port = True
-        #        break
-        #assert found_open_port == True
-
-        # Prep a clamd.conf to use for most (if not all) of the tests.
         config = '''
             Foreground yes
             PidFile {pid}
@@ -84,20 +69,24 @@ class TC(testcase.TestCase):
             CommandReadTimeout 1
             MaxQueue 800
             MaxConnectionQueueLength 1024
-            '''.format(pid=TC.clamd_pid, dbdir=TC.path_db)
-        if operating_system == 'windows':
-            # Only have TCP socket option for Windows.
-            config += '''
+            '''.format(
+            pid=TC.clamd_pid, dbdir=TC.path_db
+        ) + (
+            '''
                 TCPSocket {socket}
                 TCPAddr localhost
-                '''.format(socket=TC.clamd_port_num)
-        else:
-            # Use LocalSocket for Posix, because that's what check_clamd expects.
-            config += '''
+                '''.format(
+                socket=TC.clamd_port_num
+            )
+            if operating_system == 'windows'
+            else '''
                 LocalSocket {localsocket}
                 TCPSocket {tcpsocket}
                 TCPAddr localhost
-                '''.format(localsocket=TC.clamd_socket, tcpsocket=TC.clamd_port_num)
+                '''.format(
+                localsocket=TC.clamd_socket, tcpsocket=TC.clamd_port_num
+            )
+        )
 
         TC.clamd_config = TC.path_tmp / 'clamd-test.conf'
         TC.clamd_config.write_text(config)
@@ -126,8 +115,7 @@ class TC(testcase.TestCase):
                 self.proc.wait(timeout=120)
                 self.proc.stdin.close()
             except OSError as exc:
-                self.log.warning('Unexpected exception {}'.format(exc))
-                pass  # ignore
+                self.log.warning(f'Unexpected exception {exc}')
             self.proc = None
         try:
             TC.clamd_pid.unlink()
@@ -147,7 +135,7 @@ class TC(testcase.TestCase):
         command = '{valgrind} {valgrind_args} {clamd} --config-file={clamd_config}'.format(
             valgrind=TC.valgrind, valgrind_args=TC.valgrind_args, clamd=TC.clamd, clamd_config=TC.clamd_config
         )
-        self.log.info('Starting clamd: {}'.format(command))
+        self.log.info(f'Starting clamd: {command}')
         self.proc = subprocess.Popen(
             command.strip().split(' '),
             stdin=subprocess.PIPE,
@@ -282,9 +270,7 @@ class TC(testcase.TestCase):
 
         assert output.ec == 0  # success
 
-        expected_results = [
-            'ClamAV {}'.format(TC.version),
-        ]
+        expected_results = [f'ClamAV {TC.version}']
         self.verify_output(output.out, expected=expected_results)
 
     def test_clamd_01_ping_pong(self):
@@ -296,7 +282,7 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
         output = self.execute_command('{clamdscan} -p 5 -c {clamd_config}'.format(
             clamdscan=TC.clamdscan, clamd_config=TC.clamd_config))
@@ -318,7 +304,7 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
         # First we'll ping-pong to make sure clamd is up
         # If clamd isn't up before the version test, clamdscan will return it's
@@ -332,8 +318,11 @@ class TC(testcase.TestCase):
         output = self.execute_command('{clamdscan} --version -c {clamd_config}'.format(
             clamdscan=TC.clamdscan, clamd_config=TC.clamd_config))
         assert output.ec == 0  # success
-        self.verify_output(output.out,
-            expected=['ClamAV {}'.format(TC.version)], unexpected=['Could not connect to clamd'])
+        self.verify_output(
+            output.out,
+            expected=[f'ClamAV {TC.version}'],
+            unexpected=['Could not connect to clamd'],
+        )
 
     def test_clamd_03_reload(self):
         '''
@@ -345,12 +334,16 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
         (TC.path_tmp / 'reload-testfile').write_bytes(b'ClamAV-RELOAD-Test')
 
-        self.run_clamdscan('{}'.format(TC.path_tmp / "reload-testfile"),
-            expected_ec=0, expected_out=['reload-testfile: OK', 'Infected files: 0'])
+        self.run_clamdscan(
+            f'{TC.path_tmp / "reload-testfile"}',
+            expected_ec=0,
+            expected_out=['reload-testfile: OK', 'Infected files: 0'],
+        )
+
 
         (TC.path_db / 'reload-test.ndb').write_text('ClamAV-RELOAD-TestFile:0:0:436c616d41562d52454c4f41442d54657374')
 
@@ -359,11 +352,14 @@ class TC(testcase.TestCase):
         assert output.ec == 0  # success
 
         time.sleep(2) # give clamd a moment to reload before trying again
-                      # with multi-threaded reloading will clamd would happily
-                      # re-scan with the old engine while it reloads.
-
-        self.run_clamdscan('{}'.format(TC.path_tmp / "reload-testfile"),
-            expected_ec=1, expected_out=['ClamAV-RELOAD-TestFile.UNOFFICIAL FOUND', 'Infected files: 1'])
+        self.run_clamdscan(
+            f'{TC.path_tmp / "reload-testfile"}',
+            expected_ec=1,
+            expected_out=[
+                'ClamAV-RELOAD-TestFile.UNOFFICIAL FOUND',
+                'Infected files: 1',
+            ],
+        )
 
     def test_clamd_04_all_testfiles(self):
         '''
@@ -374,11 +370,15 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
         testfiles = ' '.join([str(testpath) for testpath in TC.testpaths])
-        expected_results = ['{}: ClamAV-Test-File.UNOFFICIAL FOUND'.format(testpath.name) for testpath in TC.testpaths]
-        expected_results.append('Infected files: {}'.format(len(TC.testpaths)))
+        expected_results = [
+            f'{testpath.name}: ClamAV-Test-File.UNOFFICIAL FOUND'
+            for testpath in TC.testpaths
+        ]
+
+        expected_results.append(f'Infected files: {len(TC.testpaths)}')
 
         self.run_clamdscan(testfiles,
             expected_ec=1, expected_out=expected_results)
@@ -393,7 +393,7 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
         # Let's first use the ping-pong test to make sure clamd is listening.
         output = self.execute_command('{clamdscan} -p 5 -c {clamd_config}'.format(
@@ -402,9 +402,9 @@ class TC(testcase.TestCase):
         self.verify_output(output.out, expected=['PONG'])
 
         # Ok now run check_clamd to have fun with clamd's API
-        output = self.execute_command('{}'.format(TC.check_clamd))
-        self.log.info('check_clamd stdout: \n{}'.format(output.out))
-        self.log.info('check_clamd stderr: \n{}'.format(output.err))
+        output = self.execute_command(f'{TC.check_clamd}')
+        self.log.info(f'check_clamd stdout: \n{output.out}')
+        self.log.info(f'check_clamd stderr: \n{output.err}')
         assert output.ec == 0  # success
 
         expected_results = [
@@ -434,10 +434,13 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
-        self.run_clamdscan('{}'.format(TC.path_build / "unit_tests" / "clam-phish-exe"),
-            expected_ec=1, expected_out=['ClamAV-Test-File'])
+        self.run_clamdscan(
+            f'{TC.path_build / "unit_tests" / "clam-phish-exe"}',
+            expected_ec=1,
+            expected_out=['ClamAV-Test-File'],
+        )
 
     def test_clamd_07_HeuristicScanPrecedence_on(self):
         '''
@@ -456,10 +459,13 @@ class TC(testcase.TestCase):
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
-        self.run_clamdscan('{}'.format(TC.path_build / "unit_tests" / "clam-phish-exe"),
-            expected_ec=1, expected_out=['Heuristics.Phishing.Email.SpoofedDomain'])
+        self.run_clamdscan(
+            f'{TC.path_build / "unit_tests" / "clam-phish-exe"}',
+            expected_ec=1,
+            expected_out=['Heuristics.Phishing.Email.SpoofedDomain'],
+        )
 
     @unittest.skipIf(operating_system == 'windows', 'This test uses a shell script to test virus-action. TODO: add Windows support to this test.')
     def test_clamd_08_VirusEvent(self):
@@ -469,19 +475,25 @@ class TC(testcase.TestCase):
         self.step_name('Testing clamd + clamdscan w/ VirusEvent')
 
         with TC.clamd_config.open('a') as config:
-            config.write('VirusEvent {} {} "Virus found: %v"\n'.format(
-                TC.path_source / "unit_tests" / "virusaction-test.sh",
-                TC.path_tmp))
+            config.write(
+                f'VirusEvent {TC.path_source / "unit_tests" / "virusaction-test.sh"} {TC.path_tmp} "Virus found: %v"\n'
+            )
+
 
         self.start_clamd()
 
         poll = self.proc.poll()
-        assert poll == None  # subprocess is alive if poll() returns None
+        assert poll is None
 
-        self.run_clamdscan_file_only('{}'.format(TC.path_build / "test" / "clam.exe"),
-            expected_ec=1)#, expected_out=['Virus found: ClamAV-Test-File.UNOFFICIAL'])
+        self.run_clamdscan_file_only(
+            f'{TC.path_build / "test" / "clam.exe"}', expected_ec=1
+        )
 
-        self.log.info('verifying log output from virusaction-test.sh: {}'.format(str(TC.path_tmp / "test-clamd.log")))
+
+        self.log.info(
+            f'verifying log output from virusaction-test.sh: {str(TC.path_tmp / "test-clamd.log")}'
+        )
+
         self.verify_log(str(TC.path_tmp / 'test-clamd.log'),
             expected=['Virus found: ClamAV-Test-File.UNOFFICIAL'],
             unexpected=['VirusEvent incorrect', 'VirusName incorrect'])

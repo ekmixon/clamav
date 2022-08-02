@@ -92,9 +92,7 @@ class TC(testcase.TestCase):
 
         assert output.ec == 0  # success
 
-        expected_results = [
-            'ClamAV {}'.format(TC.version),
-        ]
+        expected_results = [f'ClamAV {TC.version}']
         self.verify_output(output.out, expected=expected_results)
 
     def test_freshclam_01_file_copy(self):
@@ -517,7 +515,7 @@ def mock_database_mirror(handler, port=8001):
     '''
     try:
         server = HTTPServer(('', port), handler)
-        print("Web server is running on port {}".format(port))
+        print(f"Web server is running on port {port}")
         server.serve_forever()
 
     except KeyboardInterrupt:
@@ -536,20 +534,17 @@ class WebServerHandler_02(BaseHTTPRequestHandler):
             #       someone wants to run these tests without internet access.
             self.send_response(206) # Partial file
             self.send_header('Content-type', 'application/octet-stream')
-            self.end_headers()
             page =b'ClamAV-VDB:21 Sep 2020 09-52 -0400:25934:4320797:63:2ee5a3e4285b496656117ae3809b6040:gMj7NXhxfew0+bToOF8GX7xPHPGXhOSD+CSuf3E7SHhLmVZCJUVhPS01h42I0W1py7L+BmM2yhPIW8t/oGPFw8+hdD4DU/ceET15wnPWU4lsJJeRkl46Z4D8INe9Oq36ixT1xEIkERogPE3qr6wszmjT2Xe2VcmydTXN2GfPQX:raynman:1600696324                                                                                                                                                                                                                                               '
-            self.wfile.write(page)
-
         else:
             # Send the 403 FORBIDDEN header.
             self.send_response(403) # Forbidden (blocked)
             self.send_header('Content-type', 'text/html')
-            self.end_headers()
-
             page= b'''<html><body>
                     No CVD for you!
                     </body></html>'''
-            self.wfile.write(page)
+
+        self.end_headers()
+        self.wfile.write(page)
 
 class WebServerHandler_04(BaseHTTPRequestHandler):
     '''
@@ -563,21 +558,18 @@ class WebServerHandler_04(BaseHTTPRequestHandler):
             #       someone wants to run these tests without internet access.
             self.send_response(206) # Partial file
             self.send_header('Content-type', 'application/octet-stream')
-            self.end_headers()
             page =b'ClamAV-VDB:21 Sep 2020 09-52 -0400:25934:4320797:63:2ee5a3e4285b496656117ae3809b6040:gMj7NXhxfew0+bToOF8GX7xPHPGXhOSD+CSuf3E7SHhLmVZCJUVhPS01h42I0W1py7L+BmM2yhPIW8t/oGPFw8+hdD4DU/ceET15wnPWU4lsJJeRkl46Z4D8INe9Oq36ixT1xEIkERogPE3qr6wszmjT2Xe2VcmydTXN2GfPQX:raynman:1600696324                                                                                                                                                                                                                                               '
-            self.wfile.write(page)
-
         else:
             # Send the 429 Too-Many-Requests header.
             self.send_response(429) # Too-Many-Requests (rate limiting)
             self.send_header('Content-type', 'text/html')
             self.send_header('Retry-After', '60') # Try again in a minute ;-)!
-            self.end_headers()
-
             page= b'''<html><body>
                     Retry later please!
                     </body></html>'''
-            self.wfile.write(page)
+
+        self.end_headers()
+        self.wfile.write(page)
 
 class WebServerHandler_WWW(BaseHTTPRequestHandler):
     '''
@@ -595,12 +587,15 @@ class WebServerHandler_WWW(BaseHTTPRequestHandler):
 
     def do_GET(self):
         requested_file = self.path_www / self.path.lstrip('/')
-        print("Mock Server:  Test requested: {}".format(requested_file))
+        print(f"Mock Server:  Test requested: {requested_file}")
 
         if 'Range' in self.headers:
             # This will send a CVD header so FreshClam thinks there is an update.
             (range_start, range_end) = self.headers['Range'].split('=')[-1].split('-')
-            print("Mock Server:  But they only want bytes {} through {} ...".format(range_start, range_end))
+            print(
+                f"Mock Server:  But they only want bytes {range_start} through {range_end} ..."
+            )
+
 
             if requested_file.name.endswith('.cvd'):
                 response_file = requested_file.parent / f'{requested_file}.advertised'
@@ -608,7 +603,7 @@ class WebServerHandler_WWW(BaseHTTPRequestHandler):
                 response_file = requested_file
 
             if not response_file.exists():
-                self.send_error(404, "{} Not Found".format(self.path.lstrip('/')))
+                self.send_error(404, f"{self.path.lstrip('/')} Not Found")
             else:
                 with response_file.open('rb') as the_file:
                     self.send_response(206) # Partial file
@@ -619,7 +614,7 @@ class WebServerHandler_WWW(BaseHTTPRequestHandler):
                     page = the_file.read(int(range_end) - int(range_start) + 1)
 
                     bytes_written = self.wfile.write(page)
-                    print("Mock Server:  Sending {} bytes back to client.".format(bytes_written))
+                    print(f"Mock Server:  Sending {bytes_written} bytes back to client.")
 
         else:
             # Send back some whole files
@@ -629,7 +624,7 @@ class WebServerHandler_WWW(BaseHTTPRequestHandler):
                 response_file = requested_file
 
             if not response_file.exists():
-                self.send_error(404, "{} Not Found".format(self.path.lstrip('/')))
+                self.send_error(404, f"{self.path.lstrip('/')} Not Found")
             else:
                 with response_file.open('rb') as the_file:
                     self.send_response(200) # Partial file
@@ -639,4 +634,4 @@ class WebServerHandler_WWW(BaseHTTPRequestHandler):
                     page = the_file.read()
 
                     bytes_written = self.wfile.write(page)
-                    print("Mock Server:  Sending {} bytes back to client.".format(bytes_written))
+                    print(f"Mock Server:  Sending {bytes_written} bytes back to client.")

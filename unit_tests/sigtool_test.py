@@ -67,7 +67,7 @@ class TC(testcase.TestCase):
     def test_sigtool_00_version(self):
         self.step_name('sigtool version test')
 
-        self.log.warning('VG: {}'.format(os.getenv("VG")))
+        self.log.warning(f'VG: {os.getenv("VG")}')
         command = '{valgrind} {valgrind_args} {sigtool} -V'.format(
             valgrind=TC.valgrind, valgrind_args=TC.valgrind_args, sigtool=TC.sigtool
         )
@@ -75,7 +75,5 @@ class TC(testcase.TestCase):
 
         assert output.ec == 0  # success
 
-        expected_results = [
-            'ClamAV {}'.format(TC.version),
-        ]
+        expected_results = [f'ClamAV {TC.version}']
         self.verify_output(output.out, expected=expected_results)

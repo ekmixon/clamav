@@ -79,9 +79,7 @@ class TC(testcase.TestCase):
 
         assert output.ec == 0  # success
 
-        expected_results = [
-            'ClamAV {}'.format(TC.version),
-        ]
+        expected_results = [f'ClamAV {TC.version}']
         self.verify_output(output.out, expected=expected_results)
 
     def test_clamscan_01_all_testfiles(self):
@@ -95,9 +93,13 @@ class TC(testcase.TestCase):
 
         assert output.ec == 1  # virus found
 
-        expected_results = ['{}: ClamAV-Test-File.UNOFFICIAL FOUND'.format(testpath.name) for testpath in TC.testpaths]
-        expected_results.append('Scanned files: {}'.format(len(TC.testpaths)))
-        expected_results.append('Infected files: {}'.format(len(TC.testpaths)))
+        expected_results = [
+            f'{testpath.name}: ClamAV-Test-File.UNOFFICIAL FOUND'
+            for testpath in TC.testpaths
+        ]
+
+        expected_results.append(f'Scanned files: {len(TC.testpaths)}')
+        expected_results.append(f'Infected files: {len(TC.testpaths)}')
         self.verify_output(output.out, expected=expected_results)
 
     def test_clamscan_02_all_testfiles_ign2(self):
@@ -111,9 +113,13 @@ class TC(testcase.TestCase):
 
         assert output.ec == 1  # virus found
 
-        expected_results = ['{}: ClamAV-Test-File.UNOFFICIAL FOUND'.format(testpath.name) for testpath in TC.testpaths]
-        expected_results.append('Scanned files: {}'.format(len(TC.testpaths)))
-        expected_results.append('Infected files: {}'.format(len(TC.testpaths)))
+        expected_results = [
+            f'{testpath.name}: ClamAV-Test-File.UNOFFICIAL FOUND'
+            for testpath in TC.testpaths
+        ]
+
+        expected_results.append(f'Scanned files: {len(TC.testpaths)}')
+        expected_results.append(f'Infected files: {len(TC.testpaths)}')
         self.verify_output(output.out, expected=expected_results)
 
     def test_clamscan_03_phish_test_not_enabled(self):
@@ -168,7 +174,7 @@ class TC(testcase.TestCase):
         assert output.ec == 1  # virus found
 
         # Use check_fpu_endian to determine expected results
-        command = '{}'.format(TC.check_fpu_endian)
+        command = f'{TC.check_fpu_endian}'
         fpu_endian_output = self.execute_command(command)
 
         expected_results = [
@@ -180,7 +186,7 @@ class TC(testcase.TestCase):
         else:
             expected_results.append('clam.ea06.exe: ClamAV-Test-Icon-EA0X.UNOFFICIAL FOUND')
             expected_num_infected = 4
-        expected_results.append('Infected files: {}'.format(expected_num_infected))
+        expected_results.append(f'Infected files: {expected_num_infected}')
         self.verify_output(output.out, expected=expected_results)
 
     def test_clamscan_06_LDB_VI(self):
